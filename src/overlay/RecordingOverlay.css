@@ -1,0 +1,1113 @@
+@import "../styles/theme.css";
+
+:root {
+  --s-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Near-opaque app surface (theme.css --color-background at 98%). Auto-flips
+     light/dark with --color-background, so no dark-mode override is needed. */
+  --s-surface: color-mix(in srgb, var(--color-background) 98%, transparent);
+  /* Accent = logo blue; flips automatically via --color-logo-primary. */
+  --s-accent: var(--color-logo-primary);
+  --s-accent-soft: color-mix(
+    in srgb,
+    var(--color-background-ui) 16%,
+    transparent
+  );
+  /* Neutrals. Hairlines reuse the app's mid-gray at low opacity - same vocabulary
+     as the app's border-mid-gray/* utilities. muted/faint are overlay-specific
+     secondary/tertiary text grays (no theme equivalent). */
+  --s-muted: #6e6e6e;
+  --s-faint: #9a9a9a;
+  --s-border: color-mix(in srgb, var(--color-mid-gray) 22%, transparent);
+  --s-hair: color-mix(in srgb, var(--color-mid-gray) 12%, transparent);
+
+  /* Card geometry - single source of truth for the visible overlay sizes. The
+     native overlay window (overlay.rs) is sized from these: it must be at least
+     the card's max footprint (--ov-work-w for compact, --ov-open-w for Live),
+     since the card is anchored flush to the screen edge in CSS. Keep overlay.rs
+     in sync when these change. */
+  --ov-rest-w: 172px; /* resting compact pill (minimal, recording) -- roomy enough
+                         for the English working label before the grow starts */
+  --ov-pill-w: 184px; /* base width / Live pill before it opens or collapses */
+  --ov-work-w: 216px; /* working pill (transcribing / polishing) -- wide enough to
+                         center longer labels; shared by Live (collapsed) + minimal */
+  --ov-objective-w: 300px; /* Continue → rotating follow-up prompt hints */
+  --ov-open-w: 392px; /* Live panel, expanded */
+  --ov-base-h: 40px; /* control-row height (.sbase) */
+  --ov-cap-max-h: 64px; /* max height of the scrolling live-text region */
+  /* Post-transcription screen-share stack - keep overlay.rs RESULT_* in sync. */
+  --ov-share-w: 720px;
+  --ov-share-h: 405px;
+  --ov-stack-gap: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Accent uses the lighter logo blue in dark - reads better on the dark
+       surface than the deeper UI blue. */
+    --s-accent-soft: color-mix(
+      in srgb,
+      var(--color-logo-primary) 20%,
+      transparent
+    );
+    --s-muted: #a3a09a;
+    --s-faint: #6f6c66;
+    /* Hairlines flip to the near-white text token for contrast on dark. */
+    --s-border: color-mix(in srgb, var(--color-text) 12%, transparent);
+    --s-hair: color-mix(in srgb, var(--color-text) 8%, transparent);
+  }
+}
+
+/* ============================================================
+   Unified overlay stage - one fixed, transparent container shared by the compact
+   pill and the Live panel (both render the same `.scard` base). The card is
+   anchored flush to the screen-edge side (bottom by default, top when placed up
+   top) and centered horizontally, so the visible card sits exactly
+   OVERLAY_*_OFFSET from the screen edge regardless of window height - only the
+   offsets in overlay.rs move it. Pops scale from that edge, so the card is never
+   drawn past it (matters for the 4px top offset on Windows/Linux).
+   ============================================================ */
+.ov-stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center; /* horizontal centering, kept for both forms */
+  align-items: flex-end; /* bottom placement: flush to the bottom edge */
+  font-family: var(--s-font);
+  transition: opacity 220ms ease;
+}
+html.handy-locked .ov-stage {
+  opacity: 0.42;
+}
+.ov-stage.top {
+  align-items: flex-start; /* top placement: flush to the top edge */
+}
+
+/* Post-transcription stack: screen-share pill + status pill with a gap. */
+.ov-stage.ov-stack {
+  flex-direction: column;
+  gap: var(--ov-stack-gap);
+  align-items: center;
+}
+.ov-stage.ov-stack.top {
+  align-items: center;
+  justify-content: flex-start;
+}
+.ov-stage.ov-stack:not(.top) {
+  justify-content: flex-end;
+}
+
+/* Screen-share placeholder card + status sentence under it. */
+.sshare-block {
+  box-sizing: border-box;
+  width: var(--ov-share-w);
+  max-width: 100%;
+  /* Room for the hanging status notch + extraction card. */
+  padding-bottom: 10px;
+  margin-bottom: 6px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: scard-pop 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: bottom center;
+  /* Keep the extract card's border fully visible. */
+  overflow: visible;
+}
+.ov-stage.top .sshare-block {
+  transform-origin: top center;
+}
+.sshare {
+  position: relative;
+  width: 100%;
+  height: var(--ov-share-h);
+  border-radius: 20px;
+  /* Visible so the bottom notch can hang off the frame */
+  overflow: visible;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  /* Keep notch clearance when an extraction card follows. */
+  margin-bottom: 18px;
+}
+.sshare-frame {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--s-accent) 8%, var(--s-surface));
+}
+.sshare-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--s-muted);
+}
+.sshare-icon {
+  width: 36px;
+  height: 36px;
+  opacity: 0.85;
+}
+.sshare-label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* Live isolated-browser feed (Stagehand screenshot or mock page). */
+.sshare-live,
+.sshare-mock {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #1c1f24;
+}
+.sshare-shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sshare-webrtc {
+  background: #0b0d10;
+}
+.sshare-embed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #0b0d10;
+}
+/* Blocks clicks while watching so Take control doesn't remount the WebRTC iframe. */
+.sshare-watch-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+  cursor: default;
+}
+.sshare-webrtc.interactive .sshare-embed {
+  pointer-events: auto;
+}
+.sshare-webrtc.watching .sshare-embed {
+  pointer-events: none;
+}
+.sshare-chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55),
+    rgba(0, 0, 0, 0)
+  );
+  pointer-events: none;
+}
+.sshare-url {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: -0.01em;
+}
+.sshare-live-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.75);
+}
+.sshare-webrtc .sshare-live-badge {
+  background: rgba(34, 197, 94, 0.8);
+}
+.sshare-mock-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sshare-mock-label {
+  position: relative;
+  z-index: 1;
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 560;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+.sshare-hl {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 2px solid rgba(255, 196, 0, 0.95);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(255, 214, 10, 0.55),
+    0 0 0 9999px rgba(0, 0, 0, 0.22);
+  animation: sshare-pulse 1.4s ease-in-out infinite;
+}
+.sshare-live .sshare-hl {
+  /* Page already has a yellow mark baked into the screenshot; keep a soft ring. */
+  box-shadow: 0 0 0 2px rgba(255, 214, 10, 0.35);
+}
+@keyframes sshare-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Extracted quote + investigation meaning under the share preview. */
+.sextract {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--s-border);
+  background: var(--s-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 132px;
+  /* Clip text via line-clamp on children - overflow:hidden here was cutting
+     the right/bottom border off against the transparent overlay window. */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.sextract-kicker {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--s-faint);
+}
+.sextract-kicker-why {
+  margin-top: 6px;
+}
+.sextract-quote {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1.35;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sextract-meaning {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--s-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Status tab under the share frame - simple rounded hang, no side wings. */
+.sstatus {
+  --shiny-width: 100px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 2;
+  width: max-content;
+  max-width: min(78%, 280px);
+  margin-inline: auto;
+  transform: translateY(-1px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 3px 14px 6px;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+.sstatus-text {
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+/* Magic UI-style animated shiny text while the agent is working:
+   https://magicui.design/docs/components/animated-shiny-text */
+.sstatus-text.shiny {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-text) 88%, transparent) 45%,
+    color-mix(in srgb, var(--color-text) 88%, transparent) 55%,
+    transparent
+  );
+  background-size: var(--shiny-width) 100%;
+  background-position: calc(-100% - var(--shiny-width)) 0;
+  background-repeat: no-repeat;
+  /* Base muted fill so glyphs stay readable between shine passes */
+  background-color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: sstatus-shiny-text 8s infinite;
+}
+.sstatus-text.paused {
+  color: var(--s-faint);
+  -webkit-text-fill-color: var(--s-faint);
+  background: none;
+  animation: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+@keyframes sstatus-shiny-text {
+  0%,
+  90%,
+  100% {
+    background-position: calc(-100% - var(--shiny-width)) 0;
+  }
+  30%,
+  60% {
+    background-position: calc(100% + var(--shiny-width)) 0;
+  }
+}
+
+/* Compact pill: fade the whole container in/out (the pill itself never pops or
+   morphs). */
+.ov-fade {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.ov-fade.show {
+  opacity: 1;
+}
+
+/* Top placement, Live panel: stack the control pill above the text region so the
+   card grows downward from its top edge (oldest line under the pill, newest at
+   the bottom) - mirroring the bottom overlay's upward flow. The compact pill has
+   no flowing text, so this only affects the Live panel. The text region keeps the
+   same fade + scroll-pin; older lines dissolve up under the pill. */
+.ov-stage.top .scard {
+  /* column-reverse stacks the control pill above the text region. */
+  flex-direction: column-reverse;
+  transform-origin: top center;
+}
+.ov-stage.top .stext-cap {
+  /* Mirror of the bottom overlay (top: 12 / bottom: 0): the first line sits flush
+     under the pill and the breathing room moves below the text. The top fade is
+     off at rest - at zero top padding it would dim the resting first line - and
+     switches on (below) only once text overflows. */
+  padding-top: 0;
+  padding-bottom: 12px;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+/* Once live text overflows, fade older lines up under the pill, matching the
+   bottom overlay's top fade. Gated on `.overflowing` so a short resting line
+   (sitting at the very top) is never dimmed. */
+.ov-stage.top .stext-cap.overflowing {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+}
+.ov-stage.top .stext-cap p {
+  /* Top-anchor short text just under the pill; on overflow the cap still pins to
+     the bottom (newest visible) and older lines fade off the top, same as bottom. */
+  margin: 0;
+}
+
+/* Shared base card. Flat: theme surface + hairline border, no shadow or blur. */
+.scard {
+  width: var(--ov-pill-w);
+  border-radius: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: none; /* hold our own width; never let the stage flex shrink the card */
+  transform-origin: bottom center;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  /* Flat: no drop shadow, no backdrop blur/saturate (was a glassy gradient look). */
+  /* pop-in plays on mount; morph (width/radius) is a transition */
+  animation: scard-pop 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    width 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, width, opacity;
+}
+@keyframes scard-pop {
+  from {
+    opacity: 0;
+    /* Scale from the anchored edge (transform-origin) - never translate past it. */
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.scard.leaving {
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 240ms ease,
+    transform 300ms ease;
+}
+.scard.open {
+  width: var(--ov-open-w);
+  border-radius: 16px;
+}
+.scard.working {
+  width: var(--ov-work-w);
+  border-radius: 18px;
+}
+
+/* Compact form: two fixed widths so the recording→working change is an animatable
+   width transition (intrinsic max-content can't be transitioned, and every label
+   is short enough to fit the resting pill, so content-sizing produced no visible
+   grow). The resting pill hugs the waveform; the working pill is roomy enough to
+   center the longest label - the .swork-label ellipsis is only a safety net past it. */
+.scard.compact {
+  animation: none;
+  width: var(--ov-rest-w);
+}
+.scard.compact.cworking {
+  width: var(--ov-work-w);
+}
+.scard.compact.cactions {
+  width: auto;
+  min-width: var(--ov-work-w);
+  max-width: var(--ov-share-w);
+}
+.scard.compact.cactions.ccomplete {
+  /* Wide enough for all four completion actions on one row. */
+  max-width: none;
+  width: max-content;
+}
+
+/* Unsaved-investigation confirm (hotkey while completion screen is up). */
+.sconfirm {
+  width: min(360px, 100%);
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: scard-pop 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: bottom center;
+}
+.ov-stage.top .sconfirm {
+  transform-origin: top center;
+}
+.sconfirm-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: color-mix(in srgb, var(--color-text) 92%, transparent);
+}
+.sconfirm-body {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--s-muted);
+}
+.sconfirm-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.sconfirm-actions .saction {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  gap: 5px;
+}
+.sconfirm-actions .saction-icon {
+  width: 11px;
+  height: 11px;
+}
+.sconfirm-actions .saction-icon-asset {
+  width: 12px;
+  height: 12px;
+}
+.scard.compact.cactions.ccomplete .sactions {
+  flex-wrap: nowrap;
+  padding: 0 10px;
+  height: var(--ov-base-h);
+  gap: 6px;
+}
+.scard.compact.cobjective {
+  width: var(--ov-objective-w);
+}
+
+/* Completion: slideshow of Steel screenshots from this run. */
+.scomplete-block {
+  padding-bottom: 0;
+  margin-bottom: 6px;
+}
+.scomplete-frame {
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--s-accent) 14%, var(--s-surface)),
+      var(--s-surface) 55%
+    );
+}
+.scomplete-replay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #1c1f24;
+}
+.scomplete-shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: scomplete-fade 420ms ease;
+}
+@keyframes scomplete-fade {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.scomplete-chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55),
+    rgba(0, 0, 0, 0)
+  );
+  pointer-events: none;
+}
+.scomplete-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+}
+.scomplete-count {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  font-variant-numeric: tabular-nums;
+}
+.scomplete-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 28px 12px 10px;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.62),
+    rgba(0, 0, 0, 0)
+  );
+  pointer-events: none;
+}
+.scomplete-placeholder {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--s-muted);
+  padding: 16px;
+}
+.scomplete-film {
+  position: absolute;
+  inset: 18px 22px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+.scomplete-film span {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
+  border: 1px solid var(--s-hair);
+}
+.scomplete-film span:nth-child(2) {
+  opacity: 0.75;
+}
+.scomplete-film span:nth-child(3) {
+  opacity: 0.55;
+}
+.scomplete-film span:nth-child(4) {
+  opacity: 0.4;
+}
+.scomplete-play {
+  position: relative;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-text) 72%, transparent);
+  color: var(--color-background);
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background 140ms ease;
+}
+.scomplete-play-overlay {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+.scomplete-play svg {
+  width: 22px;
+  height: 22px;
+}
+.scomplete-play:hover {
+  background: color-mix(in srgb, var(--color-text) 88%, transparent);
+  transform: scale(1.04);
+}
+.scomplete-play-overlay:hover {
+  background: rgba(0, 0, 0, 0.72);
+}
+.scomplete-play:active {
+  transform: scale(0.97);
+}
+.scomplete-label {
+  position: relative;
+  z-index: 1;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
+}
+.scomplete-placeholder .scomplete-label {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--color-text) 78%, transparent);
+}
+.scomplete-sub {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: left;
+  max-width: 280px;
+}
+.scomplete-placeholder .scomplete-sub {
+  color: color-mix(in srgb, var(--color-text) 48%, transparent);
+  text-align: center;
+}
+
+/* Post-transcription action buttons (placeholders for now). */
+.sactions {
+  height: var(--ov-base-h);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.saction {
+  height: 28px;
+  padding: 0 12px 0 14px;
+  border-radius: 14px;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 120ms ease;
+}
+.saction-icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  display: block;
+}
+/* Nudge labeled-button icons down slightly; text stays put. */
+.saction-pause .saction-icon,
+.saction-primary .saction-icon {
+  transform: translateY(1px);
+}
+.saction-icon-control {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  /* Asset is dark gray on transparent; invert to white for the blue button. */
+  filter: brightness(0) invert(1);
+}
+.saction-icon-asset {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
+  /* Provided icons are white-on-transparent after processing. */
+}
+.saction-icon-glyph {
+  width: 12px;
+  height: 12px;
+  color: #fff;
+}
+.saction-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 2px;
+}
+.saction-key-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 0.55em;
+  margin: 0;
+  padding: 0;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  text-align: center;
+  color: color-mix(in srgb, #fff 70%, transparent);
+}
+.saction-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #fff;
+  background: color-mix(in srgb, #fff 16%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+  box-shadow: none;
+}
+.saction:active {
+  transform: scale(0.97);
+}
+.saction-primary {
+  background: var(--color-background-ui);
+  color: #fff;
+}
+.saction-primary:hover {
+  filter: brightness(1.06);
+}
+.saction-pause {
+  background: color-mix(in srgb, var(--color-text) 18%, transparent);
+  color: #fff;
+}
+.saction-pause:hover {
+  background: color-mix(in srgb, var(--color-text) 26%, transparent);
+}
+.saction-icon-only {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-text) 18%, transparent);
+  color: #fff;
+}
+.saction-icon-only:hover {
+  background: color-mix(in srgb, var(--color-text) 26%, transparent);
+}
+
+/* text region - auto-height open via grid-rows trick; region fades as a whole */
+.stext {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 440ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms ease;
+}
+.scard.open .stext {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.stext-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+.stext-cap {
+  max-height: var(--ov-cap-max-h);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
+  padding-bottom: 0px;
+  padding-left: 14px;
+  padding-right: 14px;
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.35;
+  letter-spacing: -0.003em;
+  color: color-mix(in srgb, var(--color-text) 90%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+/* Hide the scrollbar (WebKit/Chromium) - scroll-back is signalled by the fade. */
+.stext-cap::-webkit-scrollbar {
+  display: none;
+}
+.stext-cap p {
+  /* Bottom-anchor the text when it's shorter than the viewport, avoiding the
+     justify-content:flex-end overflow bug that makes the top unscrollable. */
+  margin: auto 0 0;
+}
+.stext-cap .tentative {
+  color: inherit;
+}
+.scaret {
+  display: inline-block;
+  width: 2px;
+  height: 1.02em;
+  translate: 0 3px;
+  margin-left: 1px;
+  background: var(--s-accent);
+  border-radius: 2px;
+  animation: scaret-blink 1.05s steps(1) infinite;
+}
+@keyframes scaret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* base row - dot (left) | waveform (center) | timer + cancel (right).
+   Same structure for pill & panel; the dot stays anchored left in both. */
+.sbase {
+  height: var(--ov-base-h);
+  padding: 0 10px;
+  display: grid;
+  /* Equal side columns (min 22px to hold the cancel button) keep the center item
+     - waveform or label - centered whether the pill is at min width or content-
+     sized. */
+  grid-template-columns: minmax(22px, 1fr) auto minmax(22px, 1fr);
+  align-items: center;
+}
+.sbase-l {
+  display: flex;
+  padding-left: 5px;
+  align-items: center;
+  justify-self: start;
+}
+.sbase-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
+.sdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--s-accent);
+  flex: none;
+  animation: sdot-pulse 1.9s infinite;
+}
+@keyframes sdot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--s-accent-soft);
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+.stimer {
+  font-size: 12px;
+  color: var(--s-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 240ms ease 80ms;
+}
+.scard.open .stimer {
+  opacity: 1;
+}
+
+/* Waveform - simple reactive bars, themed; heights set inline from mic levels. */
+.swave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 8px;
+  height: 18px;
+  flex: none;
+}
+.swave i {
+  width: 4px;
+  min-height: 3px;
+  max-height: 18px;
+  border-radius: 2px;
+  background: var(--s-accent);
+  transition: height 80ms linear;
+}
+.sx {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex: none;
+  padding: 0;
+  border: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--s-muted);
+  background: var(--s-hair);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 100ms ease;
+}
+.sx svg {
+  width: 9px;
+  height: 9px;
+  display: block;
+}
+.sx:hover {
+  background: var(--s-accent-soft);
+  color: var(--color-text);
+  transform: scale(1.05);
+}
+.sx:active {
+  transform: scale(0.95);
+}
+
+/* working state (transcribing / polishing) - spinner + label */
+.sspinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--s-hair);
+  border-top-color: var(--s-accent);
+  animation: sspin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes sspin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.swork-label {
+  font-size: 12px;
+  color: var(--s-muted);
+  white-space: nowrap;
+  padding: 0 8px; /* breathing room from the spinner / cancel when content-sized */
+  /* Safety net: ellipsize rather than clip if a label exceeds the max pill width. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.swork-prompt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  text-overflow: clip;
+}
+.swork-prompt-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: swork-prompt-in 420ms ease both;
+}
+@keyframes swork-prompt-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

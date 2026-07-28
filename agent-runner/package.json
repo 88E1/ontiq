@@ -1,0 +1,13 @@
+{
+  "name": "handy-agent-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/run.mjs",
+    "postinstall": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.51.0",
+    "steel-sdk": "^0.14.0"
+  }
+}
