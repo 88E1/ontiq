@@ -1,7 +1,5 @@
 # ONTIQ ; a background OSINT agent 
 
-Desktop voice agent that runs browser tasks in the background to conduct open-source intelligence from public web sources. 
-
 <img width="1000" height="563" alt="ontiq-demo" src="https://github.com/user-attachments/assets/9e59db29-7540-46a0-a333-db3c8cc0056d" />
 
 ## What it does
