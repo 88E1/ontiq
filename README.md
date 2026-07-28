@@ -29,3 +29,7 @@ Use **Node**, not Bun (Playwright can hang under Bun on Windows).
 ## Guardrails
 
 Public sources only. Attribute every finding. Human reviews before action. You’re responsible for law and ToS. 
+
+## NOTE
+
+Built on top of Handy, the best open-source voice agent today :) 
